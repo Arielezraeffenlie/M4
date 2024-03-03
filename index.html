@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL Drawing</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas"></canvas>
+    <script>
+        // Mendapatkan konteks WebGL dari canvas
+        var canvas = document.getElementById('canvas');
+        var gl = canvas.getContext('webgl2');
+        gl.depthFunc(gl.LEQUAL);
+
+        // Definisi data geometri (vertice, color, indices) untuk segmen A dan E
+        var vertices = [
+            // Vertices for segment A
+            -0.1, 0.5, -0.2, 0.5, -0.1, -0.5, -0.2, -0.5, // Top bar of A
+            -0.1, 0.5, 0.1, 0.5, -0.1, 0.4, 0.1, 0.4, // Left bar of A
+            0.1, 0.5, 0.2, 0.5, 0.1, -0.5, 0.2, -0.5, // Right bar of A
+            -0.1, 0.0, 0.1, 0.0, -0.1, -0.1, 0.1, -0.1, // Middle bar of A
+
+            // Vertices for segment E
+            0.3, 0.5, 0.4, 0.5, 0.3, -0.5, 0.4, -0.5,
+            0.3, 0.5, 0.6, 0.5, 0.3, 0.4, 0.6, 0.4,
+            0.3, 0.0, 0.6, 0.0, 0.3, -0.1, 0.6, -0.1,
+            0.3, -0.5, 0.6, -0.5, 0.3, -0.4, 0.6, -0.4
+        ];
+
+        var colors = [
+            1.0, 0.0, 0.0,
+            1.0, 1.0, 0.0,
+            1.0, 0.0, 0.0,
+            1.0, 1.0, 0.0,
+
+            1.0, 0.0, 0.0,
+            1.0, 1.0, 0.0,
+            1.0, 1.0, 0.0,
+            1.0, 0.0, 0.0,
+
+            1.0, 1.0, 0.0,
+            1.0, 0.0, 0.0,
+            1.0, 1.0, 0.0,
+            1.0, 0.0, 0.0,
+
+
+            1.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+            1.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+
+            1.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+            1.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+
+            1.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+            1.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+
+            1.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+            1.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+
+            1.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+            1.0, 1.0, 0.0,
+            0.0, 1.0, 0.0
+        ];
+
+        var indices = [
+            // Indices for segment A
+            0, 1, 2, 1, 2, 3, // Top bar of A
+            4, 5, 6, 5, 6, 7, // Left bar of A
+            8, 9, 10, 9, 10, 11, // Right bar of A
+            12, 13, 14, 13, 14, 15, // Middle bar of A
+
+            // Indices for segment E
+            16, 17, 18, 17, 18, 19, // Top bar of E
+            20, 21, 22, 21, 22, 23, // Left bar of E
+            24, 25, 26, 25, 26, 27, // Middle bar of E
+            28, 29, 30, 29, 30, 31 // Bottom bar of E
+        ];
+
+        // Shader program untuk menggambar objek
+        var vertCode = `
+        attribute vec2 coordinates;
+        attribute vec4 color;
+        varying vec4 vColor;
+        uniform vec2 center;
+        uniform float rotationAngle;
+
+        void main(void) {
+            // Apply rotation transformation
+            float s = sin(rotationAngle);
+            float c = cos(rotationAngle);
+            vec2 rotatedPos = vec2(c * (coordinates.x - center.x) + s * (coordinates.y - center.y) + center.x,
+                                    -s * (coordinates.x - center.x) + c * (coordinates.y - center.y) + center.y);
+
+            gl_Position = vec4(rotatedPos, 0.0, 1.0);
+            vColor = color;
+        }`;
+
+        var fragCode = `
+        precision mediump float;
+        varying vec4 vColor;
+
+        void main(void) {
+            gl_FragColor = vColor;
+        }`;
+
+        // Compile shaders
+        var vertShader = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vertShader, vertCode);
+        gl.compileShader(vertShader);
+
+        var fragShader = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fragShader, fragCode);
+        gl.compileShader(fragShader);
+
+        // Membuat program shader
+        var shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertShader);
+        gl.attachShader(shaderProgram, fragShader);
+        gl.linkProgram(shaderProgram);
+        gl.useProgram(shaderProgram);
+
+        // Membuat fungsi untuk menginterpolasi warna
+        function interpolateColors(colors) {
+            var interpolatedColors = [];
+            var numColors = colors.length / 4; // Masing-masing warna direpresentasikan oleh 4 nilai dalam array
+
+            for (var i = 0; i < numColors - 1; i++) {
+                var startColor = colors.slice(i * 4, (i + 1) * 4);
+                var endColor = colors.slice((i + 1) * 4, (i + 2) * 4);
+
+                // Interpolasi warna antara warna awal dan akhir
+                for (var j = 0; j < 100; j++) {
+                    var ratio = j / 100;
+                    for (var k = 0; k < 4; k++) {
+                        interpolatedColors.push(startColor[k] + ratio * (endColor[k] - startColor[k]));
+                    }
+                }
+            }
+
+            // Tambahkan warna terakhir
+            for (var l = 0; l < 4; l++) {
+                interpolatedColors.push(colors[(numColors - 1) * 4 + l]);
+            }
+
+            return interpolatedColors;
+        }
+
+        // Interpolasi warna untuk segmen A dan E
+        var interpolatedColorsA = interpolateColors(colors.slice(0, 12));
+        var interpolatedColorsE = interpolateColors(colors.slice(12));
+
+        // Membuat vertex buffer
+        var vertex_buffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+        // Membuat color buffer
+        var color_buffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, color_buffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(interpolatedColorsA.concat(interpolatedColorsE)), gl.STATIC_DRAW);
+
+        // Membuat index buffer
+        var index_buffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, index_buffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+        // Menentukan layout atribut
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+        var coord = gl.getAttribLocation(shaderProgram, "coordinates");
+        gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(coord);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, color_buffer);
+        var color = gl.getAttribLocation(shaderProgram, "color");
+        gl.vertexAttribPointer(color, 4, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(color);
+
+        // Inisialisasi variabel untuk posisi dan kecepatan rotasi
+        var centerA = [-0.1, -0.5]; // Pusat "A" berada di pojok kiri bawah "A"
+        var centerE = [0.3, 0.0]; // Pusat "E"
+        var rotationSpeedA = 0.01; // Kecepatan rotasi "A"
+        var rotationSpeedE = -0.02; // Kecepatan rotasi "E"
+        var rotationAngleA = 0.0;
+        var rotationAngleE = 0.0;
+
+        function drawScene() {
+            // Update sudut rotasi
+            rotationAngleA += rotationSpeedA;
+            rotationAngleE += rotationSpeedE;
+
+            // Membersihkan canvas
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            // Menggambar segmen A
+            gl.uniform2fv(gl.getUniformLocation(shaderProgram, "center"), centerA);
+            gl.uniform1f(gl.getUniformLocation(shaderProgram, "rotationAngle"), rotationAngleA);
+            gl.drawElements(gl.TRIANGLES, indices.length / 2, gl.UNSIGNED_SHORT, 0);
+
+            // Menggambar segmen E
+            gl.uniform2fv(gl.getUniformLocation(shaderProgram, "center"), centerE);
+            gl.uniform1f(gl.getUniformLocation(shaderProgram, "rotationAngle"), rotationAngleE);
+            gl.drawElements(gl.TRIANGLES, indices.length / 2, gl.UNSIGNED_SHORT, indices.length / 2 * 2);
+
+            // Meminta frame berikutnya
+            requestAnimationFrame(drawScene);
+        }
+
+        // Mulai menggambar
+        drawScene();
+
+    </script>
+</body>
+
+</html>
